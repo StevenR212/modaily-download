@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>澳門日報 - 歷史報紙瀏覽器</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<style>
+:root { --bg-dark: #1a1a2e; --bg-card: #16213e; --bg-nav: #0f3460; --accent: #e94560; --text-pri: #e8e8e8; --text-sec: #a0a0b0; }
+body { background: var(--bg-dark); color: var(--text-pri); font-family: 'Noto Sans CJK SC','Microsoft YaHei','PingFang SC',sans-serif; }
+.navbar { background: var(--bg-nav) !important; border-bottom: 2px solid var(--accent); }
+.navbar-brand { color: var(--text-pri) !important; font-weight: 700; letter-spacing: 1px; }
+/* ── Calendar Popup ── */
+.cal-btn { background: none; border: 1px solid #2a2a4a; color: var(--text-pri); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .2s; font-size: 16px; }
+.cal-btn:hover, .cal-btn.active { background: var(--accent); border-color: var(--accent); }
+.cal-popup { position: absolute; top: 48px; left: 20px; z-index: 999; background: var(--bg-card); border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; width: 320px; box-shadow: 0 12px 40px rgba(0,0,0,.5); display: none; }
+@media (min-width: 768px) { .cal-popup { left: 100px; } }
+.cal-popup.show { display: block; }
+.cal-btn[disabled] { opacity: .3; pointer-events: none; }
+.cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.cal-header .cal-month { font-weight: 600; font-size: 15px; }
+.cal-year-select { background: transparent; border: 1px solid #2a2a4a; color: var(--text-pri); font-weight: 600; font-size: 15px; border-radius: 4px; padding: 0 4px; cursor: pointer; }
+.cal-year-select:hover { border-color: var(--accent); }
+.cal-year-select option { background: #1a1a2e; color: #e0e0e0; }
+.cal-nav-btn { background: none; border: 1px solid #2a2a4a; color: var(--text-pri); width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; font-size: 13px; }
+.cal-nav-btn:hover { background: var(--accent); border-color: var(--accent); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.cal-day-header { font-size: 11px; color: var(--text-sec); padding: 4px 0; font-weight: 600; }
+.cal-day { font-size: 13px; padding: 6px 0; border-radius: 6px; cursor: default; transition: all .15s; }
+.cal-day.available { color: var(--text-pri); cursor: pointer; font-weight: 500; }
+.cal-day.available:hover { background: var(--accent); }
+.cal-day.unavailable { color: #3a3a5a; }
+.cal-day.today { border: 1px solid var(--accent); }
+.cal-day.selected { background: var(--accent); color: #fff; font-weight: 600; }
+.cal-month-nav { display: flex; align-items: center; gap: 4px; }
+.cal-today-btn { background: none; border: 1px solid #2a2a4a; color: var(--text-sec); font-size: 11px; padding: 2px 10px; border-radius: 10px; cursor: pointer; transition: all .15s; }
+.cal-today-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* ── Card etc ── */
+.card { background: var(--bg-card); border: 1px solid #2a2a4a; border-radius: 12px; transition: all .2s; }
+.card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(233,69,96,.1); }
+.card-body { color: var(--text-pri); }
+.card-title { font-weight: 600; }
+.page-card { cursor: pointer; overflow: hidden; }
+.page-card img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
+.date-btn { background: var(--bg-card); color: var(--text-pri); border: 1px solid #2a2a4a; border-radius: 8px; padding: 8px 16px; cursor: pointer; transition: all .2s; }
+.date-btn:hover, .date-btn.active { background: var(--accent); border-color: var(--accent); }
+.article-item { padding: 12px 16px; border-bottom: 1px solid #2a2a4a; cursor: pointer; transition: background .15s; }
+.article-item:hover { background: rgba(233,69,96,.08); }
+.article-item:last-child { border-bottom: none; }
+.article-body { max-height: 600px; overflow-y: auto; white-space: pre-wrap; line-height: 1.8; font-size: 15px; padding: 16px; background: rgba(0,0,0,.2); border-radius: 8px; }
+.search-result { padding: 12px 16px; border-left: 3px solid var(--accent); margin-bottom: 8px; background: var(--bg-card); border-radius: 0 8px 8px 0; }
+.search-result .context { color: var(--text-sec); font-size: 13px; }
+/* ── Search Pagination ── */
+.page-btn { background: var(--bg-card); color: var(--text-pri); border: 1px solid #2a2a4a; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; transition: all .2s; }
+.page-btn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+.page-btn:disabled { opacity: .35; cursor: default; }
+.page-btn.page-active { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.search-pagination { padding: 8px 0; }
+.page-nav-btn { background: var(--bg-card); color: var(--text-pri); border: 1px solid #2a2a4a; border-radius: 50%; width: 32px; height: 32px; line-height: 32px; padding: 0; text-align: center; font-size: 14px; cursor: pointer; transition: all .2s; vertical-align: middle; }
+.page-nav-btn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+.page-nav-btn:disabled { opacity: .3; cursor: default; }
+mark { background: #ffd700; color: #000; padding: 1px 3px; border-radius: 2px; }
+.badge-section { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+.loading { text-align: center; padding: 40px; color: var(--text-sec); }
+.loading .spinner-border { width: 3rem; height: 3rem; }
+.fade-in { animation: fadeIn .3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.view-btn { background: none; border: 1px solid #2a2a4a; color: var(--text-sec); padding: 4px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all .2s; }
+.view-btn:hover, .view-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.page-image-panel { position: relative; }
+#pageViewerImage { max-width: 100%; border-radius: 8px; cursor: zoom-in; }
+#pageViewerImage.zoomed { cursor: zoom-out; transform: scale(1.5); transform-origin: top left; }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-sec); }
+.empty-state i { font-size: 64px; margin-bottom: 16px; opacity: .3; }
+/* ── Flip (翻頁) View ── */
+.flip-container { display:flex; flex-direction:column; height:calc(100vh - 100px); }
+.flip-header { display:flex; align-items:center; justify-content:space-between; padding:8px 4px; flex-shrink:0; }
+.flip-header h5 { font-size:16px; font-weight:600; }
+.flip-stage { flex:1; overflow:hidden; position:relative; touch-action:pan-y; cursor:grab; border-radius:8px; background:rgba(0,0,0,.3); }
+.flip-stage:active { cursor:grabbing; }
+.flip-track { display:flex; height:100%; transition:transform .35s cubic-bezier(.25,.46,.45,.94); will-change:transform; }
+.flip-page { flex:0 0 100%; width:100%; height:100%; display:flex; align-items:center; justify-content:center; position:relative; }
+.flip-page img { max-width:100%; max-height:100%; object-fit:contain; user-select:none; -webkit-user-drag:none; pointer-events:none; }
+.flip-placeholder { text-align:center; color:var(--text-sec); font-size:14px; }
+.flip-overlay { position:absolute; bottom:0; left:0; right:0; background:linear-gradient(transparent,rgba(0,0,0,.8)); padding:24px 16px 12px; display:flex; justify-content:space-between; align-items:flex-end; pointer-events:none; }
+.flip-section { font-weight:600; font-size:15px; text-shadow:0 1px 3px rgba(0,0,0,.5); }
+.flip-article-count { font-size:12px; opacity:.8; }
+.flip-footer { display:flex; align-items:center; justify-content:space-between; padding:10px 8px; flex-shrink:0; }
+.flip-indicator { font-size:14px; font-weight:500; text-align:center; flex:1; }
+.flip-nav-btn { background:var(--bg-card); border:1px solid #2a2a4a; color:var(--text-pri); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s; flex-shrink:0; }
+.flip-nav-btn:hover { background:var(--accent); border-color:var(--accent); }
+.flip-nav-btn:disabled { opacity:.3; cursor:default; }
+.flip-nav-btn:disabled:hover { background:var(--bg-card); border-color:#2a2a4a; }
+@media(max-width:767px) {
+  .flip-container { height:calc(100vh - 60px); margin:0 -12px; }
+  .flip-overlay { padding:16px 12px 8px; }
+  .flip-section { font-size:13px; }
+}
+</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg">
+  <div class="container position-relative">
+    <a class="navbar-brand" href="#"><i class="bi bi-newspaper me-2"></i>澳門日報 <span id="navbarDate" class="text-secondary ms-1" style="font-size:14px;font-weight:400;"></span></a>
+    <div class="d-flex align-items-center gap-1">
+      <button class="cal-btn" id="prevDateBtn" onclick="goPrevDate()" title="上一日" style="font-size:20px">◀</button>
+      <button class="cal-btn" id="calToggleBtn" onclick="toggleCalendar()" title="揀日期"><i class="bi bi-calendar3"></i></button>
+      <button class="cal-btn" id="nextDateBtn" onclick="goNextDate()" title="下一日" style="font-size:20px">▶</button>
+    </div>
+    <div id="calPopup" class="cal-popup"></div>
+    <div class="d-flex gap-2">
+      <input type="text" id="searchInput" class="form-control form-control-sm" style="width:200px;background:#1a1a2e;border:1px solid #2a2a4a;color:#e8e8e8;" placeholder="🔍 搜尋文章..." onkeydown="if(event.key==='Enter') doSearch()">
+      <button class="btn btn-sm btn-outline-light" onclick="doSearch()">搜尋</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid py-3">
+  <div class="row g-3">
+    <!-- Left sidebar: Dates + Search results -->
+    <div class="col-lg-3 col-md-4">
+      <div class="card mb-3">
+        <div class="card-body p-2">
+          <div class="d-flex justify-content-between align-items-center px-2 py-1">
+            <div>
+              <small class="text-secondary fw-bold">📅 <span id="sidebarDateLabel">載入中...</span></small>
+            </div>
+            <button class="cal-btn" onclick="toggleCalendar()" title="揀日期" style="width:30px;height:30px;font-size:13px;"><i class="bi bi-calendar3"></i></button>
+          </div>
+        </div>
+      </div>
+      <!-- Quick actions -->
+      <div class="card">
+        <div class="card-body p-2">
+          <div class="d-flex flex-wrap gap-1">
+            <button class="btn btn-sm btn-outline-secondary view-btn" data-view="grid" onclick="switchView('grid')"><i class="bi bi-grid-3x3-gap me-1"></i>格仔</button>
+            <button class="btn btn-sm btn-outline-secondary view-btn" data-view="list" onclick="switchView('list')"><i class="bi bi-list me-1"></i>列表</button>
+            <button class="btn btn-sm btn-outline-secondary view-btn" data-view="flip" onclick="switchView('flip')"><i class="bi bi-book me-1"></i>翻頁</button>
+            <button class="btn btn-sm btn-outline-info" id="mobileViewerBtn" onclick="openMobileViewer()"><i class="bi bi-phone me-1"></i>手機版</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content area -->
+    <div class="col-lg-9 col-md-8">
+      <div id="mainContent">
+        <div class="empty-state">
+          <i class="bi bi-newspaper"></i>
+          <h4>揀選一個日期開始瀏覽</h4>
+          <p class="text-secondary">左邊日期列表已顯示可用嘅報紙日期</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Article modal -->
+<div class="modal fade" id="articleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="background:var(--bg-dark);border:1px solid #2a2a4a;">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="articleModalTitle">文章</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="articleModalBody"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API = '/api';
+let currentView = 'grid';
+let currentDate = null;
+let availableDates = new Set();
+let allDatesList = [];
+let calYear = 0, calMonth = 0;
+
+// ── Open mobile page viewer with current date ──
+function openMobileViewer() {
+  if (!currentDate) return;
+  // Try to find the currently displayed page from the main content area
+  let page = 1;
+  const img = document.getElementById('pageViewerImage');
+  if (img) {
+    const parts = img.src.split('/');
+    const filename = parts[parts.length - 1];
+    const match = filename.match(/(\d+)\.jpg$/);
+    if (match) page = parseInt(match[1]);
+  }
+  window.location.href = `/modaily/m?date=${currentDate}&page=${page}`;
+}
+
+// ── Prev / Next date ──
+function updateDateNav() {
+  const btn = document.getElementById('prevDateBtn');
+  const nxt = document.getElementById('nextDateBtn');
+  if (!btn || allDatesList.length === 0) return;
+  const idx = allDatesList.indexOf(currentDate);
+  btn.style.opacity = (idx < allDatesList.length - 1) ? '1' : '.3';
+  nxt.style.opacity = (idx > 0) ? '1' : '.3';
+}
+function goPrevDate() {
+  if (allDatesList.length === 0) return;
+  const idx = allDatesList.indexOf(currentDate);
+  if (idx < allDatesList.length - 1) selectDate(allDatesList[idx + 1]);
+}
+function goNextDate() {
+  if (allDatesList.length === 0) return;
+  const idx = allDatesList.indexOf(currentDate);
+  if (idx > 0) selectDate(allDatesList[idx - 1]);
+}
+
+// ── Calendar Popup (event delegation) ──
+function toggleCalendar() {
+  const popup = document.getElementById('calPopup');
+  const btn = document.getElementById('calToggleBtn');
+  if (popup.classList.contains('show')) {
+    popup.classList.remove('show');
+    btn.classList.remove('active');
+    return;
+  }
+  const d = currentDate ? new Date(currentDate) : new Date();
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  renderCalendar();
+  popup.classList.add('show');
+  btn.classList.add('active');
+}
+
+function renderCalendar() {
+  const popup = document.getElementById('calPopup');
+  const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  const dayHeaders = ['日','一','二','三','四','五','六'];
+  
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  // Build year dropdown (current year ± 5)
+  const curYear = new Date().getFullYear();
+  let yearOpts = '';
+  for (let y = curYear - 5; y <= curYear + 3; y++) {
+    yearOpts += `<option value="${y}"${y === calYear ? ' selected' : ''}>${y}</option>`;
+  }
+
+  let html = `
+    <div class="cal-header">
+      <span class="cal-month"><select class="cal-year-select" data-action="select-year">${yearOpts}</select> ${monthNames[calMonth]}</span>
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" data-action="prev-year" title="上一年"><i class="bi bi-chevron-double-left"></i></button>
+        <button class="cal-nav-btn" data-action="prev-month"><i class="bi bi-chevron-left"></i></button>
+        <button class="cal-today-btn" data-action="go-today">今日</button>
+        <button class="cal-nav-btn" data-action="next-month"><i class="bi bi-chevron-right"></i></button>
+        <button class="cal-nav-btn" data-action="next-year" title="下一年"><i class="bi bi-chevron-double-right"></i></button>
+      </div>
+    </div>
+    <div class="cal-grid">
+      ${dayHeaders.map(h => `<div class="cal-day-header">${h}</div>`).join('')}
+  `;
+
+  for (let i = 0; i < firstDay; i++) {
+    html += '<div></div>';
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isAvailable = availableDates.has(dateStr);
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === currentDate;
+    let cls = 'cal-day';
+    if (isAvailable) cls += ' available';
+    else cls += ' unavailable';
+    if (isToday) cls += ' today';
+    if (isSelected) cls += ' selected';
+    html += `<div class="${cls}"${isAvailable ? ` data-action="select-date" data-date="${dateStr}"` : ''}>${d}</div>`;
+  }
+
+  html += '</div>';
+  popup.innerHTML = html;
+}
+
+// Event delegation: single listener handles all popup clicks (stopPropagation prevents
+// the click-outside handler from firing — renderCalendar() replaces innerHTML, which
+// removes the original e.target from the DOM, causing contains() checks to fail)
+document.getElementById('calPopup').addEventListener('click', function(e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+  e.stopPropagation();
+  const action = target.dataset.action;
+
+  if (action === 'prev-month') {
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCalendar();
+  } else if (action === 'next-month') {
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCalendar();
+  } else if (action === 'prev-year') {
+    calYear--;
+    renderCalendar();
+  } else if (action === 'next-year') {
+    calYear++;
+    renderCalendar();
+  } else if (action === 'go-today') {
+    const today = new Date();
+    calYear = today.getFullYear();
+    calMonth = today.getMonth();
+    renderCalendar();
+  } else if (action === 'select-date') {
+    const dateStr = target.dataset.date;
+    closeCalendar();
+    selectDate(dateStr);
+  }
+});
+
+// Separate change listener for the year <select> (change event, not click)
+document.getElementById('calPopup').addEventListener('change', function(e) {
+  const target = e.target.closest('[data-action="select-year"]');
+  if (!target) return;
+  e.stopPropagation();
+  calYear = parseInt(target.value);
+  renderCalendar();
+});
+
+function closeCalendar() {
+  document.getElementById('calPopup').classList.remove('show');
+  document.getElementById('calToggleBtn').classList.remove('active');
+}
+
+// Click outside to close (works with any .cal-btn toggle)
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('calPopup');
+  if (popup.classList.contains('show') && !popup.contains(e.target) && !e.target.closest('.cal-btn')) {
+    closeCalendar();
+  }
+});
+
+// ── Dates ──
+async function loadDates() {
+  try {
+    const r = await fetch(`${API}/dates`);
+    const data = await r.json();
+    availableDates = new Set(data.dates.map(d => d.date));
+    allDatesList = data.dates.map(d => d.date);
+    // Select first date if none selected
+    if (allDatesList.length > 0 && !currentDate) {
+      selectDate(allDatesList[0]);
+    } else if (currentDate && availableDates.has(currentDate)) {
+      updateSidebarDate(currentDate);
+      updateDateNav();
+    } else if (allDatesList.length > 0) {
+      selectDate(allDatesList[0]);
+    }
+  } catch(e) {
+    document.getElementById('sidebarDateLabel').textContent = '❌ 載入失敗';
+  }
+}
+
+function updateSidebarDate(dateStr) {
+  document.getElementById('sidebarDateLabel').textContent = dateStr;
+  const dayNames = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+  const d = new Date(dateStr);
+  const dayName = dayNames[d.getDay()];
+  // Update navbar with date + weekday
+  const navbarDate = document.getElementById('navbarDate');
+  if (navbarDate) navbarDate.textContent = `${dateStr} ${dayName}`;
+}
+
+// ── Select date ──
+async function selectDate(dateStr) {
+  currentDate = dateStr;
+  updateSidebarDate(dateStr);
+  document.getElementById('mainContent').innerHTML = '<div class="loading"><div class="spinner-border me-2"></div>載入版面...</div>';
+  try {
+    const r = await fetch(`${API}/dates/${dateStr}`);
+    const data = await r.json();
+    renderPages(dateStr, data.pages, data.summary);
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML = '<div class="text-danger p-3">❌ 載入版面失敗</div>';
+  }
+  updateDateNav();
+}
+
+// ── Render pages grid/list ──
+function renderPages(dateStr, pages, summary) {
+  const container = document.getElementById('mainContent');
+  const header = `<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="m-0"><i class="bi bi-calendar-event me-2"></i>${dateStr} <small class="text-secondary fs-6 ms-2">${pages.length} 個版面</small></h4>
+  </div>`;
+
+  if (currentView === 'flip') {
+    renderFlipView(dateStr, pages);
+    return;
+  }
+  if (currentView === 'grid') {
+    container.innerHTML = header + `<div class="row g-3" id="pageGrid">
+      ${pages.map(p => `
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+          <div class="card page-card h-100" onclick="selectPage('${dateStr}','${p.node_id}')">
+            <div class="card-body p-2 text-center">
+              <div class="mb-1" style="height:308px;background:rgba(0,0,0,.5);border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                ${p.has_image
+                  ? `<img src="${API}/images/${dateStr}/${p.node_id}.jpg" alt="${p.node_id}" style="height:100%;width:100%;object-fit:contain;" loading="lazy">`
+                  : `<i class="bi bi-file-earmark-text" style="font-size:32px;opacity:.3;"></i>`
+                }
+              </div>
+              <small class="fw-bold">${p.node_id}</small>
+              <div><small class="text-secondary">${p.section}</small></div>
+              <small class="badge-section">${p.article_count || 0} 篇</small>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  } else {
+    container.innerHTML = header + `<div class="list-group" style="background:var(--bg-card);border:1px solid #2a2a4a;border-radius:8px;">
+      ${pages.map(p => `
+        <div class="list-group-item d-flex align-items-center gap-3" style="background:transparent;border-color:#2a2a4a;color:var(--text-pri);cursor:pointer;" onclick="selectPage('${dateStr}','${p.node_id}')">
+          ${p.has_image
+            ? `<img src="${API}/images/${dateStr}/${p.node_id}.jpg" alt="" style="width:60px;height:45px;object-fit:cover;border-radius:4px;" loading="lazy">`
+            : `<i class="bi bi-file-earmark-text" style="font-size:24px;opacity:.3;width:60px;text-align:center;"></i>`
+          }
+          <div class="flex-grow-1">
+            <strong>${p.node_id}</strong> — ${p.section}
+          </div>
+          <span class="badge-section">${p.article_count || 0} 篇</span>
+          <i class="bi bi-chevron-right text-secondary"></i>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+}
+
+// ── Select page & show articles ──
+async function selectPage(dateStr, pageId) {
+  document.getElementById('mainContent').innerHTML = '<div class="loading"><div class="spinner-border me-2"></div>載入文章...</div>';
+  try {
+    const r = await fetch(`${API}/dates/${dateStr}/pages/${pageId}`);
+    const data = await r.json();
+    renderPageDetail(dateStr, pageId, data);
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML = '<div class="text-danger p-3">❌ 載入文章失敗</div>';
+  }
+}
+
+function renderPageDetail(dateStr, pageId, data) {
+  const container = document.getElementById('mainContent');
+  container.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <button class="btn btn-sm btn-outline-secondary me-2" onclick="selectDate('${dateStr}')"><i class="bi bi-arrow-left"></i> 返回</button>
+        <h4 class="d-inline m-0">
+          ${data.prev_page_id
+            ? `<button class="page-nav-btn me-1" onclick="selectPage('${dateStr}','${data.prev_page_id}')" title="上一版：${data.prev_page_id}"><i class="bi bi-chevron-left"></i></button>`
+            : `<button class="page-nav-btn me-1" disabled><i class="bi bi-chevron-left"></i></button>`
+          }
+          ${pageId} — ${data.section}
+          ${data.next_page_id
+            ? `<button class="page-nav-btn ms-1" onclick="selectPage('${dateStr}','${data.next_page_id}')" title="下一版：${data.next_page_id}"><i class="bi bi-chevron-right"></i></button>`
+            : `<button class="page-nav-btn ms-1" disabled><i class="bi bi-chevron-right"></i></button>`
+          }
+          <small class="text-secondary fs-6 ms-2">${dateStr}</small>
+        </h4>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="card page-image-panel">
+          <div class="card-body p-2 text-center">
+            ${data.has_image
+              ? `<img id="pageViewerImage" src="${API}/images/${dateStr}/${pageId}.jpg" alt="${pageId}" class="img-fluid" onclick="this.classList.toggle('zoomed')">`
+              : `<div class="py-4 text-secondary">無版面圖</div>`
+            }
+            <small class="text-secondary d-block mt-1">點擊圖片放大</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-body p-0">
+            <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center">
+              <strong><i class="bi bi-file-text me-1"></i>文章列表 (${data.articles.length})</strong>
+              <span class="text-secondary" style="font-size:12px;">點擊文章閱讀詳細</span>
+            </div>
+            <div id="articleList" style="max-height:500px;overflow-y:auto;">
+              ${data.articles.length > 0
+                ? data.articles.map(a => `
+                  <div class="article-item" onclick="openArticle('${dateStr}','${pageId}','${a.id}')">
+                    <div class="d-flex justify-content-between">
+                      <strong>${a.title || '無標題'}</strong>
+                      ${a.body_length ? `<small class="text-secondary">${(a.body_length/100).toFixed(0)} 字</small>` : ''}
+                    </div>
+                    ${a.body_preview ? `<small class="text-secondary">${a.body_preview}...</small>` : ''}
+                  </div>
+                `).join('')
+                : '<div class="p-3 text-center text-secondary">呢版無文章</div>'
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Open article modal ──
+async function openArticle(dateStr, pageId, articleId) {
+  const titleEl = document.getElementById('articleModalTitle');
+  const bodyEl = document.getElementById('articleModalBody');
+  titleEl.textContent = '載入中...';
+  bodyEl.innerHTML = '<div class="loading"><div class="spinner-border me-2"></div></div>';
+  
+  const modal = new bootstrap.Modal(document.getElementById('articleModal'));
+  modal.show();
+  
+  try {
+    const r = await fetch(`${API}/articles/${articleId}?date_str=${dateStr}&page_id=${pageId}`);
+    const data = await r.json();
+    titleEl.textContent = data.title || '無標題';
+    
+    let html = '';
+    if (data.pub_info) html += `<div class="text-secondary mb-2" style="font-size:13px;">📰 ${data.pub_info}</div>`;
+    if (data.keywords) html += `<div class="mb-2"><span class="badge-section me-1">關鍵詞</span>${data.keywords}</div>`;
+    if (data.description) html += `<div class="mb-3 text-secondary" style="font-size:14px;">${data.description}</div>`;
+    if (data.body_text) {
+      html += `<div class="article-body">${escapeHtml(data.body_text)}</div>`;
+    } else {
+      html += '<div class="text-secondary p-3 text-center">無文章內容</div>';
+    }
+    bodyEl.innerHTML = html;
+  } catch(e) {
+    titleEl.textContent = '❌ 載入失敗';
+    bodyEl.innerHTML = '<div class="text-danger">無法載入文章</div>';
+  }
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Search ──
+let searchState = { q: '', page: 1, totalPages: 1 };
+
+async function doSearch(page) {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  
+  // If page arg provided, use it; otherwise reset to 1
+  if (page === undefined) {
+    page = 1;
+    searchState.q = q;
+  }
+  searchState.page = page;
+  
+  const container = document.getElementById('mainContent');
+  container.innerHTML = '<div class="loading"><div class="spinner-border me-2"></div>搜尋中...</div>';
+  
+  try {
+    const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}&page=${page}&page_size=100`);
+    const data = await r.json();
+    
+    if (data.total === 0) {
+      container.innerHTML = `<div class="empty-state">
+        <i class="bi bi-search"></i>
+        <h4>無搜尋結果</h4>
+        <p class="text-secondary">「${escapeHtml(q)}」搵唔到相關文章</p>
+      </div>`;
+      return;
+    }
+    
+    searchState.totalPages = data.total_pages;
+    
+    container.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0"><i class="bi bi-search me-2"></i>「${escapeHtml(q)}」嘅搜尋結果 <small class="text-secondary fs-6 ms-2">${data.total} 篇</small></h4>
+      </div>
+      ${data.results.map(r => `
+        <div class="search-result fade-in" onclick="selectPage('${r.date}','${r.page_id}')" style="cursor:pointer;">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="badge-section me-1">${r.date}</span>
+              <span class="badge-section" style="background:#555;">${r.page_id} ${r.section}</span>
+              <strong class="ms-2">${highlight(r.title, q)}</strong>
+            </div>
+            <small class="text-secondary">${r.body_length ? (r.body_length/100).toFixed(0) + ' 字' : ''}</small>
+          </div>
+          ${r.context ? `<div class="context mt-1">${highlight(r.context, q)}</div>` : ''}
+        </div>
+      `).join('')}
+      ${renderSearchPagination(data)}
+    `;
+  } catch(e) {
+    container.innerHTML = '<div class="text-danger p-3">❌ 搜尋失敗</div>';
+  }
+}
+
+function renderSearchPagination(data) {
+  if (data.total_pages <= 1) return '';
+  
+  const p = data.page;
+  const tp = data.total_pages;
+  let pages = [];
+  
+  // Build page number list: first, last, current ±2
+  const range = [];
+  for (let i = Math.max(1, p - 2); i <= Math.min(tp, p + 2); i++) {
+    range.push(i);
+  }
+  
+  // Add first page if not in range
+  if (range[0] > 1) {
+    pages.push(1);
+    if (range[0] > 2) pages.push('...');
+  }
+  pages = pages.concat(range);
+  if (range[range.length - 1] < tp) {
+    if (range[range.length - 1] < tp - 1) pages.push('...');
+    pages.push(tp);
+  }
+  
+  let html = '<div class="search-pagination mt-3 d-flex justify-content-center align-items-center gap-1 flex-wrap">';
+  
+  // Prev button
+  html += `<button class="page-btn" onclick="doSearch(${p - 1})" ${p <= 1 ? 'disabled' : ''}><i class="bi bi-chevron-left"></i></button>`;
+  
+  // Page numbers
+  for (const n of pages) {
+    if (n === '...') {
+      html += '<span class="text-secondary mx-1">...</span>';
+    } else {
+      html += `<button class="page-btn ${n === p ? 'page-active' : ''}" onclick="doSearch(${n})">${n}</button>`;
+    }
+  }
+  
+  // Next button
+  html += `<button class="page-btn" onclick="doSearch(${p + 1})" ${p >= tp ? 'disabled' : ''}><i class="bi bi-chevron-right"></i></button>`;
+  
+  // Page info
+  html += `<span class="text-secondary ms-2 small">第 ${p}/${tp} 頁</span>`;
+  html += '</div>';
+  
+  return html;
+}
+
+function highlight(text, keyword) {
+  const re = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+  return escapeHtml(text).replace(re, '<mark>$1</mark>');
+}
+
+// ── Flip (翻頁) View ──
+let flipPages = [];
+let flipDate = '';
+let flipIndex = 0;
+let flipTouchX = 0;
+let flipDragStart = 0;
+let flipIsDragging = false;
+let flipTrackTranslate = 0;
+let flipAnimId = null;
+let flipStageW = 0;
+
+function renderFlipView(dateStr, pages) {
+  flipDate = dateStr;
+  flipPages = pages;
+  flipIndex = 0;
+  const container = document.getElementById('mainContent');
+  const pageHtml = pages.map((p,i) => `
+    <div class="flip-page" data-index="${i}" onclick="flipGoPage('${dateStr}','${p.node_id}')">
+      ${p.has_image
+        ? `<img src="${API}/images/${dateStr}/${p.node_id}.jpg" alt="${p.node_id}" draggable="false">`
+        : `<div class="flip-placeholder"><i class="bi bi-file-earmark-text" style="font-size:64px;opacity:.3;"></i><div class="mt-2">暫無版面圖</div></div>`
+      }
+      <div class="flip-overlay">
+        <span class="flip-section">${p.section}</span>
+        <span class="flip-article-count">${p.article_count||0} 篇文章</span>
+      </div>
+    </div>
+  `).join('');
+
+  container.innerHTML = `
+    <div class="flip-container" id="flipContainer">
+      <div class="flip-header">
+        <button class="btn btn-sm btn-outline-secondary" onclick="selectDate('${dateStr}')"><i class="bi bi-arrow-left"></i> 返回</button>
+        <h5 class="m-0">${dateStr}</h5>
+        <div></div>
+      </div>
+      <div class="flip-stage" id="flipStage">
+        <div class="flip-track" id="flipTrack">${pageHtml}</div>
+      </div>
+      <div class="flip-footer">
+        <button class="flip-nav-btn" id="flipPrev" onclick="flipTo(flipIndex-1)"><i class="bi bi-chevron-left"></i></button>
+        <span class="flip-indicator" id="flipIndicator">${pages[0].node_id} — 1 / ${pages.length}</span>
+        <button class="flip-nav-btn" id="flipNext" onclick="flipTo(flipIndex+1)"><i class="bi bi-chevron-right"></i></button>
+      </div>
+    </div>
+  `;
+  flipInitEvents();
+  flipUpdateView();
+}
+
+function flipInitEvents() {
+  const stage = document.getElementById('flipStage');
+  flipStageW = stage.clientWidth;
+
+  // Touch
+  stage.addEventListener('touchstart', e => { flipTouchX = e.touches[0].clientX; }, {passive:true});
+  stage.addEventListener('touchend', e => {
+    const dx = flipTouchX - e.changedTouches[0].clientX;
+    if (Math.abs(dx) > 50) flipTo(dx > 0 ? flipIndex+1 : flipIndex-1);
+  }, {passive:true});
+
+  // Mouse drag
+  stage.addEventListener('mousedown', e => {
+    flipIsDragging = true;
+    flipDragStart = e.clientX;
+    const track = document.getElementById('flipTrack');
+    track.style.transition = 'none';
+    flipTrackTranslate = -flipIndex * flipStageW;
+    track.style.transform = `translateX(${flipTrackTranslate}px)`;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!flipIsDragging) return;
+    const dx = e.clientX - flipDragStart;
+    const track = document.getElementById('flipTrack');
+    track.style.transform = `translateX(${flipTrackTranslate + dx}px)`;
+  });
+  document.addEventListener('mouseup', e => {
+    if (!flipIsDragging) return;
+    flipIsDragging = false;
+    const dx = e.clientX - flipDragStart;
+    const track = document.getElementById('flipTrack');
+    track.style.transition = 'transform .35s cubic-bezier(.25,.46,.45,.94)';
+    if (Math.abs(dx) > 80) {
+      flipTo(dx < 0 ? flipIndex+1 : flipIndex-1);
+    } else {
+      flipUpdateView();
+    }
+  });
+
+  // Keyboard
+  document.addEventListener('keydown', flipKeyHandler);
+}
+
+function flipKeyHandler(e) {
+  if (document.getElementById('flipStage')) {
+    if (e.key === 'ArrowLeft') flipTo(flipIndex-1);
+    else if (e.key === 'ArrowRight') flipTo(flipIndex+1);
+  }
+}
+
+function flipTo(idx) {
+  if (idx < 0 || idx >= flipPages.length) return;
+  flipIndex = idx;
+  flipUpdateView();
+}
+
+function flipUpdateView() {
+  const track = document.getElementById('flipTrack');
+  const stage = document.getElementById('flipStage');
+  if (!track || !stage) return;
+  const w = stage.clientWidth;
+  track.style.transition = 'transform .35s cubic-bezier(.25,.46,.45,.94)';
+  track.style.transform = `translateX(-${flipIndex * w}px)`;
+
+  const p = flipPages[flipIndex];
+  document.getElementById('flipIndicator').textContent = `${p.node_id} — ${flipIndex+1} / ${flipPages.length}`;
+  document.getElementById('flipPrev').disabled = flipIndex === 0;
+  document.getElementById('flipNext').disabled = flipIndex === flipPages.length - 1;
+}
+
+function flipGoPage(dateStr, pageId) {
+  selectPage(dateStr, pageId);
+}
+
+// ── Switch view ──
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  if (currentDate) selectDate(currentDate);
+}
+
+// ── Init ──
+loadDates();
+</script>
+</body>
+</html>

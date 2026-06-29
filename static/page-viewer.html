@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<title>澳門日報 - 版面閱讀器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#fff;user-select:none;-webkit-user-select:none}
+
+/* ── Top bar ── */
+#topbar{position:fixed;top:0;left:0;right:0;height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);z-index:100}
+#topbar .info{display:flex;align-items:center;gap:8px;font-size:14px}
+#topbar .info .date{font-weight:600;color:#ddd}
+#topbar .info .page-num{color:#999;font-size:13px}
+#topbar .info .section{color:#f90;font-size:12px;padding:2px 6px;background:rgba(255,153,0,.15);border-radius:4px}
+#dateBtn,#prevDateBtn,#nextDateBtn{background:none;border:none;color:#fff;cursor:pointer;padding:6px 8px;border-radius:6px;display:flex;align-items:center;gap:4px;font-size:13px}
+#dateBtn:hover,#dateBtn:active,#prevDateBtn:hover,#prevDateBtn:active,#nextDateBtn:hover,#nextDateBtn:active{background:rgba(255,255,255,.15)}
+#dateBtn svg{width:20px;height:20px;fill:currentColor}
+#dateBtn:active,#prevDateBtn:active,#nextDateBtn:active{transform:scale(.92)}
+.prev-disabled{opacity:.3;pointer-events:none}
+.date-nav-group{display:flex;align-items:center;gap:2px}
+.date-arrow{font-size:18px!important;padding:2px 10px!important}
+.date-arrow:active{transform:scale(.88)!important}
+#datePicker{display:none;position:fixed;top:52px;right:12px;z-index:101;background:#222;border:1px solid #444;border-radius:8px;padding:8px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+#datePicker.show{display:block}
+#datePicker input{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 10px;font-size:14px;width:150px}
+#datePicker input:focus{outline:none;border-color:#f90}
+
+/* ── Image viewer ── */
+#viewer{position:fixed;top:48px;left:0;right:0;bottom:0;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center;background:#111}
+#viewer img{max-width:100%;max-height:100%;object-fit:contain;transition:transform .1s ease;transform-origin:center center;will-change:transform;pointer-events:none}
+#viewer.zoomed img{max-width:none;max-height:none}
+#viewer.zoomed{overflow:auto;-webkit-overflow-scrolling:touch}
+/* When zoomed, fall back to browser scroll + standard behaviour */
+#viewer.native-zoom{cursor:grab;overflow:auto;-webkit-overflow-scrolling:touch}
+#viewer.native-zoom img{max-width:none;max-height:none;width:auto;height:auto;pointer-events:auto}
+
+/* ── Navigation arrows ── */
+.nav-btn{position:fixed;top:50%;transform:translateY(-50%);z-index:50;background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:0;transition:opacity .2s;backdrop-filter:blur(4px)}
+.nav-btn.show{opacity:1}
+.nav-btn:hover,.nav-btn:active{background:rgba(255,255,255,.2)}
+.nav-btn.prev{left:8px}
+.nav-btn.next{right:8px}
+#viewer:hover~.nav-btn,.nav-btn:hover{opacity:1}
+
+/* ── Loading / error ── */
+#loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#111;z-index:200;gap:12px;font-size:15px;color:#888}
+#loading .spinner{width:32px;height:32px;border:3px solid #333;border-top:3px solid #f90;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading .err{color:#ff4444;font-size:14px;display:none}
+#loading.hide{display:none}
+
+/* ── Swipe hint (mobile) ── */
+#swipeHint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:40;background:rgba(0,0,0,.6);color:#888;font-size:12px;padding:6px 14px;border-radius:20px;opacity:0;transition:opacity .5s;pointer-events:none}
+#swipeHint.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <span>載入中…</span>
+  <div class="err" id="errMsg"></div>
+</div>
+
+<!-- Top bar -->
+<div id="topbar">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <a href="/modaily/" id="backHomeBtn" style="color:#fff;text-decoration:none;font-size:13px;display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.08);" title="返回主頁">
+      <span style="font-size:16px;line-height:1;">‹</span> 返回主頁
+    </a>
+    <div class="info">
+      <span class="date" id="dateLabel"></span>
+      <span class="page-num" id="pageLabel"></span>
+      <span class="section" id="sectionLabel" style="display:none"></span>
+    </div>
+  </div>
+  <div class="date-nav-group">
+    <button id="prevDateBtn" class="date-arrow" aria-label="上一日">◀</button>
+    <button id="dateBtn">
+      <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+    </button>
+    <button id="nextDateBtn" class="date-arrow" aria-label="下一日">▶</button>
+  </div>
+</div>
+
+<!-- Date picker popup -->
+<div id="datePicker">
+  <input type="date" id="dateInput">
+</div>
+
+<!-- Nav buttons -->
+<button class="nav-btn prev" id="prevBtn" aria-label="上一版">‹</button>
+<button class="nav-btn next" id="nextBtn" aria-label="下一版">›</button>
+
+<!-- Viewer -->
+<div id="viewer">
+  <img id="pageImg" alt="版面" draggable="false">
+</div>
+
+<!-- Swipe hint -->
+<div id="swipeHint">← 左右滑動切換版面 →</div>
+
+<script>
+// ── Config ──
+const API = '/api';
+
+// ── State ──
+let currentDate = '';
+let currentIdx = 0;
+let pages = [];  // {node_id, section}
+let totalPages = 0;
+let isLoading = false;
+
+// Zoom state (transform-based)
+let scale = 1;
+let panX = 0, panY = 0;
+let isPanning = false;
+let startX, startY;
+let lastDist = 0;
+let isPinching = false;
+
+// ── DOM refs ──
+const loadingEl = document.getElementById('loading');
+const errMsg = document.getElementById('errMsg');
+const pageImg = document.getElementById('pageImg');
+const viewer = document.getElementById('viewer');
+const dateLabel = document.getElementById('dateLabel');
+const pageLabel = document.getElementById('pageLabel');
+const sectionLabel = document.getElementById('sectionLabel');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const dateBtn = document.getElementById('dateBtn');
+const prevDateBtn = document.getElementById('prevDateBtn');
+const nextDateBtn = document.getElementById('nextDateBtn');
+const datePicker = document.getElementById('datePicker');
+const dateInput = document.getElementById('dateInput');
+const swipeHint = document.getElementById('swipeHint');
+
+// ── Hide swipe hint after first navigation ──
+function hideSwipeHint() {
+  swipeHint.classList.remove('show');
+}
+
+// ── Load pages for a date ──
+async function loadDate(dateStr) {
+  if (isLoading) return;
+  isLoading = true;
+  loadingEl.classList.remove('hide');
+  errMsg.style.display = 'none';
+  document.querySelector('.spinner').style.display = 'block';
+
+  try {
+    const r = await fetch(`${API}/dates/${dateStr}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    pages = data.pages || [];
+    totalPages = pages.length;
+    currentDate = dateStr;
+    return true;
+  } catch (e) {
+    errMsg.textContent = '❌ 無法載入日期資料: ' + e.message;
+    errMsg.style.display = 'block';
+    document.querySelector('.spinner').style.display = 'none';
+    return false;
+  } finally {
+    isLoading = false;
+  }
+}
+
+// ── Show page by index ──
+function showPage(idx) {
+  if (idx < 0 || idx >= pages.length) return;
+  currentIdx = idx;
+  const p = pages[idx];
+  const imgUrl = `${API}/images/${currentDate}/${p.node_id}.jpg`;
+  pageImg.src = imgUrl;
+  pageImg.onload = () => {
+    loadingEl.classList.add('hide');
+    resetZoom();
+  };
+  pageImg.onerror = () => {
+    pageImg.src = '';
+    loadingEl.classList.add('hide');
+    errMsg.textContent = '❌ 圖片載入失敗';
+    errMsg.style.display = 'block';
+  };
+
+  // Update info
+  dateLabel.textContent = currentDate;
+  pageLabel.textContent = `第 ${idx + 1}/${totalPages} 版`;
+  if (p.section) {
+    sectionLabel.textContent = p.section;
+    sectionLabel.style.display = 'inline';
+  } else {
+    sectionLabel.style.display = 'none';
+  }
+
+  // Nav buttons
+  prevBtn.classList.toggle('show', idx > 0);
+  nextBtn.classList.toggle('show', idx < totalPages - 1);
+}
+
+// ── Navigate with slide animation ──
+let isAnimating = false;
+let allDates = [];  // Full date list for prev/next navigation
+function goPrev() {
+  if (currentIdx <= 0 || isAnimating) return;
+  animateSlide(currentIdx - 1, 1); // slide right
+  hideSwipeHint();
+}
+function goNext() {
+  if (currentIdx >= totalPages - 1 || isAnimating) return;
+  animateSlide(currentIdx + 1, -1); // slide left
+  hideSwipeHint();
+}
+
+function animateSlide(targetIdx, direction) {
+  // direction: -1 = next (slide left), +1 = prev (slide right)
+  if (targetIdx < 0 || targetIdx >= pages.length) return;
+  isAnimating = true;
+
+  const outX = direction * 100;
+  const inX = -direction * 100;
+  const img = pageImg;
+
+  // ── Step 1: Slide current out ──
+  img.style.transition = 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease';
+  img.style.transform = `translateX(${outX}%)`;
+  img.style.opacity = '0';
+
+  setTimeout(() => {
+    // ── Step 2: Swap image, position off-screen on opposite side ──
+    currentIdx = targetIdx;
+    const p = pages[targetIdx];
+    img.src = `${API}/images/${currentDate}/${p.node_id}.jpg`;
+
+    // Reset zoom state (no CSS transform — will be overwritten by animation)
+    scale = 1; panX = 0; panY = 0;
+    viewer.classList.remove('zoomed');
+
+    img.style.transition = 'none';
+    img.style.transform = `translateX(${inX}%)`;
+    img.style.opacity = '0';
+
+    // ── Step 3: Force reflow, then slide in ──
+    void img.offsetHeight;
+    img.style.transition = 'transform 0.3s cubic-bezier(0.3, 0, 0.1, 1), opacity 0.25s ease';
+    img.style.transform = 'translateX(0%)';
+    img.style.opacity = '1';
+
+    // ── Update labels ──
+    dateLabel.textContent = currentDate;
+    pageLabel.textContent = `第 ${targetIdx + 1}/${totalPages} 版`;
+    if (p.section) {
+      sectionLabel.textContent = p.section;
+      sectionLabel.style.display = 'inline';
+    } else {
+      sectionLabel.style.display = 'none';
+    }
+    prevBtn.classList.toggle('show', targetIdx > 0);
+    nextBtn.classList.toggle('show', targetIdx < totalPages - 1);
+    updateURL();
+
+    // ── On image load: hide spinner, clean up transitions ──
+    img.onload = () => {
+      loadingEl.classList.add('hide');
+      isAnimating = false;
+    };
+    img.onerror = () => {
+      img.src = '';
+      loadingEl.classList.add('hide');
+      errMsg.textContent = '❌ 圖片載入失敗';
+      errMsg.style.display = 'block';
+      isAnimating = false;
+    };
+
+    // Safety: clear anim flag after 1s regardless
+    setTimeout(() => { isAnimating = false; }, 1000);
+  }, 260);
+}
+
+// ── Zoom (transform-based, for pinch & double-tap) ──
+function resetZoom() {
+  scale = 1; panX = 0; panY = 0;
+  viewer.classList.remove('zoomed');
+  pageImg.style.transform = 'scale(1)';
+  pageImg.style.transition = 'transform .15s ease';
+}
+
+function applyZoom() {
+  scale = Math.max(1, Math.min(scale, 5));
+  const clamped = scale === 1;
+  viewer.classList.toggle('zoomed', !clamped);
+  pageImg.style.transform = clamped ? 'scale(1)' : `translate(${panX}px, ${panY}px) scale(${scale})`;
+  pageImg.style.transition = '';
+  // When zoomed, allow dragging within bounds
+}
+
+// ── Mouse wheel zoom ──
+viewer.addEventListener('wheel', function(e) {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    scale *= delta;
+    applyZoom();
+  }
+}, {passive: false});
+
+// ── Touch: swipe (page change) + pinch (zoom) ──
+let touchStartX = 0, touchStartY = 0;
+let touchStartTime = 0;
+let touchHistory = [];
+
+viewer.addEventListener('touchstart', function(e) {
+  const touches = e.touches;
+  touchHistory = [];
+  if (touches.length === 1) {
+    touchStartX = touches[0].clientX;
+    touchStartY = touches[0].clientY;
+    touchStartTime = Date.now();
+    startX = touches[0].clientX - panX;
+    startY = touches[0].clientY - panY;
+    isPanning = scale > 1;
+    isPinching = false;
+    touchHistory.push({x: touches[0].clientX, y: touches[0].clientY, t: Date.now()});
+  } else if (touches.length === 2) {
+    isPinching = true;
+    isPanning = false;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    lastDist = Math.sqrt(dx * dx + dy * dy);
+    // Save current midpoint
+    touchHistory = [];
+  }
+}, {passive: true});
+
+viewer.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  const touches = e.touches;
+  if (touches.length === 1) {
+    if (isPinching) return;
+    const cx = touches[0].clientX;
+    const cy = touches[0].clientY;
+    touchHistory.push({x: cx, y: cy, t: Date.now()});
+
+    if (scale > 1) {
+      // Pan
+      panX = cx - startX;
+      panY = cy - startY;
+      applyZoom();
+    } else {
+      // Track for swipe detection (we decide on touchend)
+    }
+  } else if (touches.length === 2) {
+    isPinching = true;
+    isPanning = false;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (lastDist > 0) {
+      scale *= (dist / lastDist);
+      applyZoom();
+    }
+    lastDist = dist;
+  }
+}, {passive: false});
+
+viewer.addEventListener('touchend', function(e) {
+  if (isPinching) {
+    isPinching = false;
+    return;
+  }
+  if (scale > 1) {
+    // Was panning, just reset panning state
+    isPanning = false;
+    return;
+  }
+
+  // Swipe detection (only when not zoomed)
+  const touches = e.changedTouches;
+  if (touches.length === 1) {
+    const dx = touches[0].clientX - touchStartX;
+    const dy = touches[0].clientY - touchStartY;
+    const dt = Date.now() - touchStartTime;
+
+    // Double-tap to reset
+    if (dt < 300 && Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+      if (scale > 1) resetZoom();
+      else {
+        scale = 2.5;
+        applyZoom();
+      }
+      return;
+    }
+
+    // Swipe: horizontal distance > 50px and more horizontal than vertical
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 2) {
+      if (dx > 0) goPrev();
+      else goNext();
+    }
+  }
+}, {passive: true});
+
+// ── Keyboard ──
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowLeft') goPrev();
+  else if (e.key === 'ArrowRight') goNext();
+  else if (e.key === 'Escape') { resetZoom(); datePicker.classList.remove('show'); }
+});
+
+// ── Mouse click navigation ──
+// Tap left/right half of the image area
+viewer.addEventListener('click', function(e) {
+  if (scale > 1) return; // Don't navigate when zoomed
+  const rect = viewer.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  if (x < rect.width * 0.35) goPrev();
+  else if (x > rect.width * 0.65) goNext();
+});
+
+// ── Date picker ──
+dateBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  datePicker.classList.toggle('show');
+  if (datePicker.classList.contains('show')) {
+    dateInput.value = currentDate;
+    dateInput.focus();
+  }
+});
+
+dateInput.addEventListener('change', function() {
+  const d = this.value;
+  if (d) navigateToDate(d);
+});
+
+// Close date picker on outside click
+document.addEventListener('click', function(e) {
+  if (!datePicker.contains(e.target) && e.target !== dateBtn && !dateBtn.contains(e.target)) {
+    datePicker.classList.remove('show');
+  }
+});
+
+// ── Prev / Next date ──
+function updateDateNav() {
+  if (allDates.length === 0) return;
+  const idx = allDates.indexOf(currentDate);
+  prevDateBtn.classList.toggle('prev-disabled', idx < 0 || idx >= allDates.length - 1);
+  nextDateBtn.classList.toggle('prev-disabled', idx <= 0);
+}
+function goPrevDate() {
+  if (allDates.length === 0) return;
+  const idx = allDates.indexOf(currentDate);
+  if (idx < allDates.length - 1) navigateToDate(allDates[idx + 1]);
+}
+function goNextDate() {
+  if (allDates.length === 0) return;
+  const idx = allDates.indexOf(currentDate);
+  if (idx > 0) navigateToDate(allDates[idx - 1]);
+}
+prevDateBtn.addEventListener('click', goPrevDate);
+nextDateBtn.addEventListener('click', goNextDate);
+
+// ── Navigate to a date (keep current page index or go to page 1) ──
+async function navigateToDate(dateStr, pageIdx) {
+  datePicker.classList.remove('show');
+  const ok = await loadDate(dateStr);
+  if (!ok) return;
+  const idx = (pageIdx !== undefined) ? Math.min(pageIdx, pages.length - 1) : 0;
+  if (pages.length === 0) {
+    errMsg.textContent = '❌ 該日期無版面資料';
+    errMsg.style.display = 'block';
+    loadingEl.classList.add('hide');
+    return;
+  }
+  showPage(idx);
+  // Show swipe hint briefly
+  swipeHint.classList.add('show');
+  setTimeout(() => swipeHint.classList.remove('show'), 3000);
+  updateDateNav();
+}
+
+// ── Prefetch date list for prev/next navigation ──
+async function refreshAllDates() {
+  try {
+    const r = await fetch(`${API}/dates`);
+    const data = await r.json();
+    allDates = (data.dates || []).map(d => d.date);
+    updateDateNav();
+  } catch(_) {}
+}
+
+// ── Init from URL params ──
+function initFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  const date = params.get('date');
+  const page = params.get('page'); // 1-indexed or node_id
+
+  // Clean URL bar immediately — hide all query params
+  window.history.replaceState(null, '', window.location.pathname);
+
+  if (date) {
+    navigateToDate(date, page ? parseInt(page) - 1 : 0);
+    refreshAllDates();
+  } else {
+    // Fallback: load today's latest
+    fetch(`${API}/dates`)
+      .then(r => r.json())
+      .then(data => {
+        allDates = (data.dates || []).map(d => d.date);
+        const dates = allDates;
+        if (dates.length > 0) {
+          const latest = dates[0];
+          navigateToDate(latest, 0);
+        } else {
+          errMsg.textContent = '❌ 無可用日期';
+          errMsg.style.display = 'block';
+          loadingEl.classList.add('hide');
+        }
+      })
+      .catch(e => {
+        errMsg.textContent = '❌ 無法載入日期列表';
+        errMsg.style.display = 'block';
+        loadingEl.classList.add('hide');
+      });
+  }
+}
+
+// ── Update URL bar (without reload) — clean, no params ──
+function updateURL() {
+  // Keep URL clean — no query params visible
+  window.history.replaceState(null, '', window.location.pathname);
+}
+
+// Override showPage to update URL
+const origShowPage = showPage;
+showPage = function(idx) {
+  origShowPage(idx);
+  updateURL();
+};
+
+// ── Start ──
+initFromURL();
+
+// ── Prefetch adjacent pages ──
+const origShowPage2 = showPage;
+showPage = function(idx) {
+  origShowPage2(idx);
+  // Prefetch next and prev
+  if (idx > 0) prefetchImage(`${API}/images/${currentDate}/${pages[idx - 1].node_id}.jpg`);
+  if (idx < pages.length - 1) prefetchImage(`${API}/images/${currentDate}/${pages[idx + 1].node_id}.jpg`);
+};
+function prefetchImage(url) {
+  const link = document.createElement('link');
+  link.rel = 'prefetch';
+  link.href = url;
+  document.head.appendChild(link);
+}
+
+</script>
+</body>
+</html>
