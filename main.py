@@ -68,12 +68,18 @@ def api_dates():
     dates = list_date_dirs()
     result = []
     for d in dates:
-        summary = load_json(OUTPUT_DIR / d / "_summary.json")
         pages = load_json(OUTPUT_DIR / d / "_pages.json")
+        # Count articles from filesystem
+        articles_dir = OUTPUT_DIR / d / "articles"
+        article_count = 0
+        if articles_dir.exists():
+            for art_page_dir in articles_dir.iterdir():
+                if art_page_dir.is_dir():
+                    article_count += len(list(art_page_dir.glob("*.json")))
         result.append({
             "date": d,
             "total_pages": len(pages) if pages else 0,
-            "total_articles": summary.get("total_articles", 0) if summary else 0,
+            "total_articles": article_count,
         })
     return {"dates": result}
 
@@ -285,8 +291,11 @@ def api_search(
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+# Only redirect bare `/` → /modaily/
+# Note: DO NOT add `@app.get("/modaily")` here — Starlette's default
+# redirect_slashes=True would redirect /modaily/ → /modaily (no slash),
+# creating an infinite loop with nginx's own = /modaily → /modaily/ redirect.
 @app.get("/", include_in_schema=False)
-@app.get("/modaily", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/modaily/")
 
