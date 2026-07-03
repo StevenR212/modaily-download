@@ -22,19 +22,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111;font-family:-ap
 .date-nav-group{display:flex;align-items:center;gap:2px}
 .date-arrow{font-size:18px!important;padding:2px 10px!important}
 .date-arrow:active{transform:scale(.88)!important}
-#datePicker{display:none;position:fixed;top:52px;right:12px;z-index:101;background:#222;border:1px solid #444;border-radius:8px;padding:8px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
-#datePicker.show{display:block}
-#datePicker input{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 10px;font-size:14px;width:150px}
-#datePicker input:focus{outline:none;border-color:#f90}
-.dp-body{display:flex;flex-direction:column;gap:6px;padding:4px}
-.dp-row{display:flex;align-items:center;gap:6px}
-.dp-row select{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 4px;font-size:15px;width:72px;text-align:center;appearance:auto}
-.dp-row select:focus{outline:none;border-color:#f90}
-.dp-row span{font-size:14px;color:#aaa;min-width:12px}
-.dp-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
-.dp-actions button{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 16px;font-size:13px;cursor:pointer}
-.dp-actions button:active{background:#444}
-.dp-actions #dpConfirm{background:#f90;color:#000;border-color:#f90;font-weight:600}
+/* ── Calendar Popup ── */
+.cal-popup{display:none;position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:101;background:#222;border:1px solid #444;border-radius:12px;padding:14px;width:300px;max-width:95vw;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.cal-popup.show{display:block}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cal-month{font-weight:600;font-size:14px;color:#ddd}
+.cal-year-select{background:#333;border:1px solid #555;color:#fff;font-weight:600;font-size:14px;border-radius:4px;padding:2px 4px;cursor:pointer}
+.cal-year-select:hover,.cal-year-select:focus{border-color:#f90;outline:none}
+.cal-year-select option{background:#222;color:#ddd}
+.cal-nav-btn{background:none;border:1px solid #555;color:#ccc;width:28px;height:28px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:12px;line-height:1}
+.cal-nav-btn:active{background:#f90;border-color:#f90;color:#000}
+.cal-month-nav{display:flex;align-items:center;gap:3px}
+.cal-today-btn{background:none;border:1px solid #555;color:#aaa;font-size:11px;padding:2px 8px;border-radius:10px;cursor:pointer;transition:all .15s}
+.cal-today-btn:active{background:#f90;color:#000;border-color:#f90}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.cal-day-header{font-size:11px;color:#777;padding:4px 0;font-weight:600}
+.cal-day{font-size:13px;padding:6px 0;border-radius:6px;cursor:default;transition:all .15s}
+.cal-day.available{color:#ddd;cursor:pointer;font-weight:500}
+.cal-day.available:active{background:#f90;color:#000}
+.cal-day.unavailable{color:#3a3a3a}
+.cal-day.today{border:1px solid #f90}
+.cal-day.selected{background:#f90;color:#000;font-weight:600}
+.cal-day.today.selected{border-color:#cc7a00}
 
 /* ── Image viewer ── */
 #viewer{position:fixed;top:48px;left:0;right:0;bottom:0;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center;background:#111}
@@ -95,18 +104,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111;font-family:-ap
   </div>
 </div>
 
-<!-- Date picker popup -->
-<div id="datePicker">
-  <div class="dp-body">
-    <div class="dp-row"><select id="dpYear"></select><span>年</span></div>
-    <div class="dp-row"><select id="dpMonth"></select><span>月</span></div>
-    <div class="dp-row"><select id="dpDay"></select><span>日</span></div>
-    <div class="dp-actions">
-      <button id="dpCancel">取消</button>
-      <button id="dpConfirm">確定</button>
-    </div>
-  </div>
-</div>
+<!-- Calendar popup -->
+<div id="calPopup" class="cal-popup"></div>
 
 <!-- Nav buttons -->
 <button class="nav-btn prev" id="prevBtn" aria-label="上一版">‹</button>
@@ -152,7 +151,6 @@ const nextBtn = document.getElementById('nextBtn');
 const dateBtn = document.getElementById('dateBtn');
 const prevDateBtn = document.getElementById('prevDateBtn');
 const nextDateBtn = document.getElementById('nextDateBtn');
-const datePicker = document.getElementById('datePicker');
 const swipeHint = document.getElementById('swipeHint');
 
 // ── Hide swipe hint after first navigation ──
@@ -424,7 +422,7 @@ viewer.addEventListener('touchend', function(e) {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'ArrowLeft') goPrev();
   else if (e.key === 'ArrowRight') goNext();
-  else if (e.key === 'Escape') { resetZoom(); datePicker.classList.remove('show'); }
+  else if (e.key === 'Escape') { resetZoom(); closeCalendar(); }
 });
 
 // ── Mouse click navigation ──
@@ -437,74 +435,133 @@ viewer.addEventListener('click', function(e) {
   else if (x > rect.width * 0.65) goNext();
 });
 
-// ── Custom date picker ──
-function populateDP(dateStr) {
-  if (!dateStr) dateStr = currentDate || new Date().toISOString().slice(0,10);
-  const parts = dateStr.split('-');
-  const minYear = allDates.length > 0
-    ? Math.min(...allDates.map(s => parseInt(s.slice(0,4))))
-    : 2018;
-  const maxYear = new Date().getFullYear() + 1;
-  const yearSel = document.getElementById('dpYear');
-  yearSel.innerHTML = '';
-  for (let yr = minYear; yr <= maxYear; yr++) {
-    const opt = document.createElement('option');
-    opt.value = yr; opt.textContent = yr;
-    if (yr === parseInt(parts[0])) opt.selected = true;
-    yearSel.appendChild(opt);
+// ── Calendar Popup ──
+const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+const dayHeaders = ['日','一','二','三','四','五','六'];
+let calYear, calMonth;
+
+function toggleCalendar() {
+  const popup = document.getElementById('calPopup');
+  if (popup.classList.contains('show')) {
+    popup.classList.remove('show');
+    return;
   }
-  const monthSel = document.getElementById('dpMonth');
-  monthSel.innerHTML = '';
-  for (let m = 1; m <= 12; m++) {
-    const opt = document.createElement('option');
-    opt.value = String(m).padStart(2,'0'); opt.textContent = m;
-    if (m === parseInt(parts[1])) opt.selected = true;
-    monthSel.appendChild(opt);
-  }
-  updateDPDays();
+  const d = currentDate ? new Date(currentDate) : new Date();
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  renderCalendar();
+  popup.classList.add('show');
 }
 
-function updateDPDays() {
-  const y = parseInt(document.getElementById('dpYear').value);
-  const m = parseInt(document.getElementById('dpMonth').value);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const daySel = document.getElementById('dpDay');
-  const prevVal = daySel.value;
-  daySel.innerHTML = '';
+function renderCalendar() {
+  const popup = document.getElementById('calPopup');
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  // Build year dropdown from actual data range (with padding)
+  const allYears = allDates.map(d => parseInt(d.slice(0,4)));
+  const minYear = allYears.length > 0 ? Math.min(...allYears) : 2018;
+  const maxYear = allYears.length > 0 ? Math.max(...allYears) : new Date().getFullYear() + 1;
+  let yearOpts = '';
+  for (let y = minYear; y <= maxYear; y++) {
+    yearOpts += `<option value="${y}"${y === calYear ? ' selected' : ''}>${y}</option>`;
+  }
+
+  let html = `
+    <div class="cal-header">
+      <span class="cal-month"><select class="cal-year-select" data-action="select-year">${yearOpts}</select> ${monthNames[calMonth]}</span>
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" data-action="prev-year">&laquo;</button>
+        <button class="cal-nav-btn" data-action="prev-month">&lsaquo;</button>
+        <button class="cal-today-btn" data-action="go-today">今日</button>
+        <button class="cal-nav-btn" data-action="next-month">&rsaquo;</button>
+        <button class="cal-nav-btn" data-action="next-year">&raquo;</button>
+      </div>
+    </div>
+    <div class="cal-grid">
+      ${dayHeaders.map(h => `<div class="cal-day-header">${h}</div>`).join('')}`;
+
+  for (let i = 0; i < firstDay; i++) {
+    html += '<div></div>';
+  }
+
   for (let d = 1; d <= daysInMonth; d++) {
-    const opt = document.createElement('option');
-    opt.value = String(d).padStart(2,'0'); opt.textContent = d;
-    if (opt.value === prevVal) opt.selected = true;
-    daySel.appendChild(opt);
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isAvailable = allDates.indexOf(dateStr) !== -1;
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === currentDate;
+    let cls = 'cal-day';
+    if (isAvailable) cls += ' available';
+    else cls += ' unavailable';
+    if (isToday) cls += ' today';
+    if (isSelected) cls += ' selected';
+    html += `<div class="${cls}"${isAvailable ? ` data-action="select-date" data-date="${dateStr}"` : ''}>${d}</div>`;
   }
+
+  html += '</div>';
+  popup.innerHTML = html;
 }
 
+// Event delegation for calendar popup
+document.getElementById('calPopup').addEventListener('click', function(e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+  e.stopPropagation();
+  const action = target.dataset.action;
+
+  if (action === 'prev-month') {
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCalendar();
+  } else if (action === 'next-month') {
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCalendar();
+  } else if (action === 'prev-year') {
+    calYear--;
+    renderCalendar();
+  } else if (action === 'next-year') {
+    calYear++;
+    renderCalendar();
+  } else if (action === 'go-today') {
+    const today = new Date();
+    calYear = today.getFullYear();
+    calMonth = today.getMonth();
+    renderCalendar();
+  } else if (action === 'select-date') {
+    const dateStr = target.dataset.date;
+    closeCalendar();
+    navigateToDate(dateStr);
+  }
+});
+
+// Year select change
+document.getElementById('calPopup').addEventListener('change', function(e) {
+  const target = e.target.closest('[data-action="select-year"]');
+  if (!target) return;
+  e.stopPropagation();
+  calYear = parseInt(target.value);
+  renderCalendar();
+});
+
+function closeCalendar() {
+  document.getElementById('calPopup').classList.remove('show');
+}
+
+// Click outside to close
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('calPopup');
+  if (popup.classList.contains('show') && !popup.contains(e.target) && e.target !== dateBtn && !dateBtn.contains(e.target)) {
+    closeCalendar();
+  }
+});
+
+// Date button toggle
 dateBtn.addEventListener('click', function(e) {
   e.stopPropagation();
-  datePicker.classList.toggle('show');
-  if (datePicker.classList.contains('show')) populateDP(currentDate);
-});
-
-document.getElementById('dpYear').addEventListener('change', updateDPDays);
-document.getElementById('dpMonth').addEventListener('change', updateDPDays);
-
-document.getElementById('dpConfirm').addEventListener('click', function() {
-  const y = document.getElementById('dpYear').value;
-  const m = document.getElementById('dpMonth').value;
-  const d = document.getElementById('dpDay').value;
-  datePicker.classList.remove('show');
-  navigateToDate(y+'-'+m+'-'+d);
-});
-
-document.getElementById('dpCancel').addEventListener('click', function() {
-  datePicker.classList.remove('show');
-});
-
-// Close date picker on outside click
-document.addEventListener('click', function(e) {
-  if (!datePicker.contains(e.target) && e.target !== dateBtn && !dateBtn.contains(e.target)) {
-    datePicker.classList.remove('show');
-  }
+  toggleCalendar();
 });
 
 // ── Prev / Next date ──
@@ -531,7 +588,7 @@ nextDateBtn.addEventListener('click', goNextDate);
 
 // ── Navigate to a date (keep current page index or go to page 1) ──
 async function navigateToDate(dateStr, pageIdx) {
-  datePicker.classList.remove('show');
+  closeCalendar();
   const ok = await loadDate(dateStr);
   if (!ok) return;
   const idx = (pageIdx !== undefined) ? Math.min(pageIdx, pages.length - 1) : 0;
