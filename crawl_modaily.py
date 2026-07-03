@@ -148,18 +148,9 @@ def extract_pages_from_index(html: str) -> list[dict]:
 # ============================================================
 # V1 page node functions (still work for dates with content)
 # ============================================================
-
-def extract_page_image_abs(html: str, page_url: str) -> str | None:
-    """Extract the newspaper page image URL using absolute page URL."""
-    match = re.search(r'<img[^>]*class="preview"[^>]*src="([^"]+)"', html)
-    if match:
-        return urljoin(page_url, match.group(1))
-    return None
-
-
+# === Article extraction from www.macaodaily.com ===
 def extract_articles_from_macaodaily(date_str: str, pages: list[dict], articles_dir: Path) -> int:
-    """
-    Extract articles from www.macaodaily.com for each newspaper section.
+    """Extract articles from www.macaodaily.com for each newspaper section.
 
     OSS node pages return "正在製作" for current-day content, so we get
     articles from the live website instead. Images still come from OSS.
@@ -400,15 +391,7 @@ def crawl_newspaper(date_str: str, output_dir: Path):
             img_path = pages_dir / img_name
             download_file(img_url, img_path, f"Page image: {node_id}")
         else:
-            # Fallback: try extracting image from node page (old method)
-            log(f"  ⚠️  No UUID image in index, trying node page...")
-            page_html_for_img = get_soup(node_url)
-            if page_html_for_img:
-                img_url_old = extract_page_image_abs(page_html_for_img, node_url)
-                if img_url_old:
-                    img_name = f"page_{node_id}.jpg"
-                    img_path = pages_dir / img_name
-                    download_file(img_url_old, img_path, f"Page image: {node_id} (from node)")
+            log(f"  ⚠️  No UUID image in index — 寧缺勿濫")
 
         # ── Check node page status ──
         page_html = get_soup(node_url)
