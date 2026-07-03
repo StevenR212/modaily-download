@@ -242,10 +242,12 @@ function renderCalendar() {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
-  // Build year dropdown (current year ± 5)
-  const curYear = new Date().getFullYear();
+  // Build year dropdown from actual data range (or default ±5)
+  const allYears = allDatesList.map(d => parseInt(d.slice(0,4)));
+  const minYear = allYears.length > 0 ? Math.min(...allYears) : new Date().getFullYear() - 5;
+  const maxYear = allYears.length > 0 ? Math.max(...allYears) : new Date().getFullYear() + 3;
   let yearOpts = '';
-  for (let y = curYear - 5; y <= curYear + 3; y++) {
+  for (let y = minYear; y <= maxYear; y++) {
     yearOpts += `<option value="${y}"${y === calYear ? ' selected' : ''}>${y}</option>`;
   }
 
