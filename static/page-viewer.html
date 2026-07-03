@@ -460,6 +460,8 @@ function goNextDate() {
   const idx = allDates.indexOf(currentDate);
   if (idx > 0) navigateToDate(allDates[idx - 1]);
 }
+prevBtn.addEventListener('click', goPrev);
+nextBtn.addEventListener('click', goNext);
 prevDateBtn.addEventListener('click', goPrevDate);
 nextDateBtn.addEventListener('click', goNextDate);
 
