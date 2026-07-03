@@ -26,6 +26,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111;font-family:-ap
 #datePicker.show{display:block}
 #datePicker input{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 10px;font-size:14px;width:150px}
 #datePicker input:focus{outline:none;border-color:#f90}
+.dp-body{display:flex;flex-direction:column;gap:6px;padding:4px}
+.dp-row{display:flex;align-items:center;gap:6px}
+.dp-row select{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 4px;font-size:15px;width:72px;text-align:center;appearance:auto}
+.dp-row select:focus{outline:none;border-color:#f90}
+.dp-row span{font-size:14px;color:#aaa;min-width:12px}
+.dp-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.dp-actions button{background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 16px;font-size:13px;cursor:pointer}
+.dp-actions button:active{background:#444}
+.dp-actions #dpConfirm{background:#f90;color:#000;border-color:#f90;font-weight:600}
 
 /* ── Image viewer ── */
 #viewer{position:fixed;top:48px;left:0;right:0;bottom:0;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center;background:#111}
@@ -88,7 +97,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111;font-family:-ap
 
 <!-- Date picker popup -->
 <div id="datePicker">
-  <input type="date" id="dateInput">
+  <div class="dp-body">
+    <div class="dp-row"><select id="dpYear"></select><span>年</span></div>
+    <div class="dp-row"><select id="dpMonth"></select><span>月</span></div>
+    <div class="dp-row"><select id="dpDay"></select><span>日</span></div>
+    <div class="dp-actions">
+      <button id="dpCancel">取消</button>
+      <button id="dpConfirm">確定</button>
+    </div>
+  </div>
 </div>
 
 <!-- Nav buttons -->
@@ -136,7 +153,6 @@ const dateBtn = document.getElementById('dateBtn');
 const prevDateBtn = document.getElementById('prevDateBtn');
 const nextDateBtn = document.getElementById('nextDateBtn');
 const datePicker = document.getElementById('datePicker');
-const dateInput = document.getElementById('dateInput');
 const swipeHint = document.getElementById('swipeHint');
 
 // ── Hide swipe hint after first navigation ──
@@ -421,19 +437,67 @@ viewer.addEventListener('click', function(e) {
   else if (x > rect.width * 0.65) goNext();
 });
 
-// ── Date picker ──
+// ── Custom date picker ──
+function populateDP(dateStr) {
+  if (!dateStr) dateStr = currentDate || new Date().toISOString().slice(0,10);
+  const parts = dateStr.split('-');
+  const minYear = allDates.length > 0
+    ? Math.min(...allDates.map(s => parseInt(s.slice(0,4))))
+    : 2018;
+  const maxYear = new Date().getFullYear() + 1;
+  const yearSel = document.getElementById('dpYear');
+  yearSel.innerHTML = '';
+  for (let yr = minYear; yr <= maxYear; yr++) {
+    const opt = document.createElement('option');
+    opt.value = yr; opt.textContent = yr;
+    if (yr === parseInt(parts[0])) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+  const monthSel = document.getElementById('dpMonth');
+  monthSel.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = String(m).padStart(2,'0'); opt.textContent = m;
+    if (m === parseInt(parts[1])) opt.selected = true;
+    monthSel.appendChild(opt);
+  }
+  updateDPDays();
+}
+
+function updateDPDays() {
+  const y = parseInt(document.getElementById('dpYear').value);
+  const m = parseInt(document.getElementById('dpMonth').value);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const daySel = document.getElementById('dpDay');
+  const prevVal = daySel.value;
+  daySel.innerHTML = '';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const opt = document.createElement('option');
+    opt.value = String(d).padStart(2,'0'); opt.textContent = d;
+    if (opt.value === prevVal) opt.selected = true;
+    daySel.appendChild(opt);
+  }
+}
+
 dateBtn.addEventListener('click', function(e) {
   e.stopPropagation();
   datePicker.classList.toggle('show');
-  if (datePicker.classList.contains('show')) {
-    dateInput.value = currentDate;
-    dateInput.focus();
-  }
+  if (datePicker.classList.contains('show')) populateDP(currentDate);
 });
 
-dateInput.addEventListener('change', function() {
-  const d = this.value;
-  if (d) navigateToDate(d);
+document.getElementById('dpYear').addEventListener('change', updateDPDays);
+document.getElementById('dpMonth').addEventListener('change', updateDPDays);
+
+document.getElementById('dpConfirm').addEventListener('click', function() {
+  const y = document.getElementById('dpYear').value;
+  const m = document.getElementById('dpMonth').value;
+  const d = document.getElementById('dpDay').value;
+  datePicker.classList.remove('show');
+  navigateToDate(y+'-'+m+'-'+d);
+});
+
+document.getElementById('dpCancel').addEventListener('click', function() {
+  datePicker.classList.remove('show');
 });
 
 // Close date picker on outside click
