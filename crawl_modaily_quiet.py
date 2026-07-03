@@ -414,8 +414,8 @@ Examples:
     parser.add_argument("--start", type=str, help="開始日期 (YYYY-MM-DD)")
     parser.add_argument("--end", type=str, help="結束日期 (YYYY-MM-DD)，唔填就係今日")
     parser.add_argument("--today", action="store_true", help="爬今日報紙")
-    parser.add_argument("--output", type=str, default="./modaily_output",
-                        help="輸出目錄 (default: ./modaily_output)")
+    parser.add_argument("--output", type=str, default="/root/modaily_output",
+                        help="輸出目錄 (default: /root/modaily_output)")
     parser.add_argument("--parallel", type=int, default=1,
                         help="同時下載數量 (default: 1，順序爬取)")
 
